@@ -121,32 +121,45 @@ def generate_ai_analysis(best_match_job, user_scores_id, p_df, axis_ids):
 # --- 4. データの読み込み ---
 @st.cache_data
 def load_data():
-    path_q = '/content/drive/MyDrive/Colab Notebooks/職業/questions_axis.csv'
-    path_p = '/content/drive/MyDrive/Colab Notebooks/職業/profiles.csv'
-    if not os.path.exists(path_q): return None, None
+    # GitHub上のファイル名を指定（パスを削除）
+    path_q = 'questions_axis.csv'
+    path_p = 'profiles.csv'
+    
+    if not os.path.exists(path_q) or not os.path.exists(path_p):
+        return None, None
     
     def read_df(p):
-        try: return pd.read_csv(p, encoding='utf-8')
-        except: return pd.read_csv(p, encoding='shift_jis')
+        try:
+            return pd.read_csv(p, encoding='utf-8')
+        except:
+            return pd.read_csv(p, encoding='shift_jis')
         
     q_df, p_df = read_df(path_q), read_df(path_p)
+    
+    # 列名のクレンジング
     q_df.columns = q_df.columns.str.strip()
     p_df.columns = p_df.columns.str.strip()
     
     temp_cols = list(q_df.columns)
-    q_df = q_df.rename(columns={temp_cols[0]: 'AxisID', temp_cols[1]: 'AxisName', temp_cols[2] if len(temp_cols) > 2 else temp_cols[-1]: 'Question'})
-    p_df = p_df.rename(columns={'job_name': 'ProfileName'})
+    q_df = q_df.rename(columns={
+        temp_cols[0]: 'AxisID', 
+        temp_cols[1]: 'AxisName', 
+        temp_cols[2] if len(temp_cols) > 2 else temp_cols[-1]: 'Question'
+    })
+    
+    if 'job_name' in p_df.columns:
+        p_df = p_df.rename(columns={'job_name': 'ProfileName'})
     
     return q_df, p_df
 
 # --- 5. メイン画面 ---
 def main():
     st.set_page_config(page_title="進路適性診断 AI", layout="centered")
-    st.title("🎓 進路適性診断システム (scikit-learn版)")
+    st.title("🎓 進路適性診断システム")
     
     q_df, p_df = load_data()
     if q_df is None:
-        st.error("CSVファイルが読み込めませんでした。Driveのパスを確認してください。")
+        st.error("CSVファイルが読み込めませんでした。GitHub上に 'questions_axis.csv' と 'profiles.csv' があるか確認してください。")
         return
 
     with st.form(key='aptitude_form'):
@@ -177,10 +190,9 @@ def main():
             st.header("📊 診断結果")
             st.success(f"### ✨ 最も適性がある職業: {best_match['職業']}")
             
-            # --- 修正箇所：適合率 → マッチ度 ---
             col1, col2 = st.columns([1, 2])
             col1.metric("マッチ度", f"{best_match['マッチ度']:.1f}%")
-            col2.progress(min(best_match['マッチ度'] / 100, 1.0))
+            col2.progress(min(max(best_match['マッチ度'] / 100, 0.0), 1.0))
             st.balloons()
 
             st.divider()
@@ -200,11 +212,9 @@ def main():
             st.divider()
             with st.expander("⚠️ 参考：現在の特性と「最も異なる」職業を表示"):
                 st.write(f"あなたの今の傾向とは正反対のスタイルを持つ職業は **「{worst_match['職業']}」** です。")
-                # --- 修正箇所：適合率 → マッチ度 ---
                 st.write(f"（マッチ度: {worst_match['マッチ度']:.1f}%）")
 
             st.divider()
-            # --- 修正箇所：適合率 → マッチ度 ---
             st.subheader("📈 職業別マッチ度ランキング（全件）")
             ranking_display = res_df[['職業', 'マッチ度']].copy()
             st.dataframe(ranking_display.style.format({'マッチ度': '{:.1f}%'}), use_container_width=True, hide_index=True)
